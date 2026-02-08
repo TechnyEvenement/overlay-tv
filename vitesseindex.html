@@ -1,1 +1,23 @@
+let lastPos = null;
+let lastTime = null;
 
+function calculVitesse(pos) {
+  if (!lastPos) {
+    lastPos = pos;
+    lastTime = Date.now();
+    return 0;
+  }
+
+  const now = Date.now();
+  const dt = (now - lastTime) / 1000;
+
+  const d = haversine(
+    { lat: lastPos.coords.latitude, lon: lastPos.coords.longitude },
+    { lat: pos.coords.latitude, lon: pos.coords.longitude }
+  );
+
+  lastPos = pos;
+  lastTime = now;
+
+  return dt > 0 ? (d / dt) * 3.6 : 0;
+}
