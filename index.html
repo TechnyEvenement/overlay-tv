@@ -1,42 +1,139 @@
-let lastPos = null;
-let samples = [];
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Overlay Vitesse Live</title>
 
-function haversine(p1, p2) {
-  const R = 6371;
-  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
-  const dLon = (p2.lon - p1.lon) * Math.PI / 180;
-  const a =
-    Math.sin(dLat/2)**2 +
-    Math.cos(p1.lat*Math.PI/180) *
-    Math.cos(p2.lat*Math.PI/180) *
-    Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+<style>
+/* ===== DESIGN BROADCAST TV ===== */
+body {
+  margin: 0;
+  background: transparent;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-navigator.geolocation.watchPosition(pos => {
-  const now = Date.now();
-  const lat = pos.coords.latitude;
-  const lon = pos.coords.longitude;
+#overlay {
+  position: fixed;
+  bottom: 40px;
+  left: 40px;
+  background: #ffd200;
+  color: #000;
+  padding: 16px 20px;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  min-width: 260px;
+}
 
-  let speed = pos.coords.speed !== null
-    ? pos.coords.speed * 3.6
-    : 0;
+.line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-  if (lastPos) {
-    const d = haversine(lastPos, { lat, lon });
-    const dt = (now - lastPos.time) / 1000;
-    if (dt > 0) speed = (d / dt) * 3.6;
+.label {
+  font-weight: bold;
+  font-size: 18px;
+  opacity: 0.85;
+}
+
+.value {
+  font-weight: bold;
+  font-size: 34px;
+}
+
+.unit {
+  font-size: 18px;
+  margin-left: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+  <div class="line">
+    <span class="label">VITESSE</span>
+    <span>
+      <span class="value" id="speed">0.0</span>
+      <span class="unit">km/h</span>
+    </span>
+  </div>
+</div>
+
+<script>
+// ===== HAVERSINE (distance GPS) =====
+function haversine(p1, p2) {
+  const R = 6371; // km
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(p1.lat * Math.PI / 180) *
+    Math.cos(p2.lat * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ===== VARIABLES =====
+let lastPos = null;
+let lastTime = null;
+let samples = []; // pour le lissage
+
+// ===== CALCUL VITESSE =====
+function calculVitesse(pos) {
+  if (!lastPos) {
+    lastPos = pos;
+    lastTime = Date.now();
+    return 0;
   }
 
-  lastPos = { lat, lon, time: now };
+  const now = Date.now();
+  const dt = (now - lastTime) / 1000;
 
-  samples.push(speed);
+  const d = haversine(
+    { lat: lastPos.coords.latitude, lon: lastPos.coords.longitude },
+    { lat: pos.coords.latitude, lon: pos.coords.longitude }
+  );
+
+  lastPos = pos;
+  lastTime = now;
+
+  return dt > 0 ? (d / dt) * 3.6 : 0; // km/h
+}
+
+// ===== GPS LIVE =====
+navigator.geolocation.watchPosition(pos => {
+
+  let vitesse;
+
+  if (pos.coords.speed !== null && pos.coords.speed > 0) {
+    // vitesse GPS brute
+    vitesse = pos.coords.speed * 3.6;
+  } else {
+    // vitesse calculée
+    vitesse = calculVitesse(pos);
+  }
+
+  // LISSAGE (moyenne glissante)
+  samples.push(vitesse);
   if (samples.length > 5) samples.shift();
 
-  const speedSmooth =
-    samples.reduce((a,b)=>a+b,0) / samples.length;
+  const vitesseLisse =
+    samples.reduce((a, b) => a + b, 0) / samples.length;
 
   document.getElementById("speed").textContent =
-    speedSmooth.toFixed(1) + " km/h";
+    vitesseLisse.toFixed(1);
 
-}, { enableHighAccuracy: true, maximumAge: 500 });
+}, error => {
+  console.error("Erreur GPS :", error);
+}, {
+  enableHighAccuracy: true,
+  maximumAge: 500,
+  timeout: 10000
+});
+</script>
+
+</body>
+</html>
