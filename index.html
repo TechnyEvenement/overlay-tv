@@ -1,23 +1,42 @@
 let lastPos = null;
-let lastTime = null;
+let samples = [];
 
-function calculVitesse(pos) {
-  if (!lastPos) {
-    lastPos = pos;
-    lastTime = Date.now();
-    return 0;
+function haversine(p1, p2) {
+  const R = 6371;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(p1.lat*Math.PI/180) *
+    Math.cos(p2.lat*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+navigator.geolocation.watchPosition(pos => {
+  const now = Date.now();
+  const lat = pos.coords.latitude;
+  const lon = pos.coords.longitude;
+
+  let speed = pos.coords.speed !== null
+    ? pos.coords.speed * 3.6
+    : 0;
+
+  if (lastPos) {
+    const d = haversine(lastPos, { lat, lon });
+    const dt = (now - lastPos.time) / 1000;
+    if (dt > 0) speed = (d / dt) * 3.6;
   }
 
-  const now = Date.now();
-  const dt = (now - lastTime) / 1000;
+  lastPos = { lat, lon, time: now };
 
-  const d = haversine(
-    { lat: lastPos.coords.latitude, lon: lastPos.coords.longitude },
-    { lat: pos.coords.latitude, lon: pos.coords.longitude }
-  );
+  samples.push(speed);
+  if (samples.length > 5) samples.shift();
 
-  lastPos = pos;
-  lastTime = now;
+  const speedSmooth =
+    samples.reduce((a,b)=>a+b,0) / samples.length;
 
-  return dt > 0 ? (d / dt) * 3.6 : 0;
-}
+  document.getElementById("speed").textContent =
+    speedSmooth.toFixed(1) + " km/h";
+
+}, { enableHighAccuracy: true, maximumAge: 500 });
